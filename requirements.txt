@@ -1,3 +1,4 @@
 Flask
-requests
+requests-futures
 beautifulsoup4
+requests
