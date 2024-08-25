@@ -1,7 +1,21 @@
-from flask import Flask, request, Response, render_template_string
+from flask import Flask, request, Response, render_template_string, g
+from requests_futures.sessions import FuturesSession
+from bs4 import BeautifulSoup
+from functools import lru_cache
 import requests
+import gzip
+import io
 
 app = Flask(__name__)
+session = FuturesSession()
+
+@lru_cache(maxsize=32)
+def fetch_url(url):
+    return requests.get(url)
+
+@app.before_request
+def before_request():
+    g.cache = {}
 
 @app.route('/')
 def home():
@@ -97,14 +111,41 @@ def proxy():
         search_query = url_or_search.replace(' ', '+')
         search_url = f"https://www.google.com/search?q={search_query}"
         try:
-            response = requests.get(search_url)
-            return Response(response.content, content_type=response.headers['Content-Type'])
+            response = fetch_url(search_url)
+            return compress_response(response.content, response.headers['Content-Type'])
         except Exception as e:
             return f"Error: {str(e)}"
     
     try:
-        response = requests.get(url_or_search)
-        return Response(response.content, content_type=response.headers['Content-Type'])
+        if url_or_search in g.cache:
+            content, content_type = g.cache[url_or_search]
+        else:
+            future = session.get(url_or_search)
+            response = future.result()
+            content = response.content
+            content_type = response.headers['Content-Type']
+            g.cache[url_or_search] = (content, content_type)
+        
+        if "text/html" in content_type.lower():
+            soup = BeautifulSoup(content, 'html.parser')
+            
+            tags = soup.find_all(['a', 'link', 'script', 'img', 'video', 'source'])
+            futures = []
+
+            for tag in tags:
+                if tag.has_attr('href'):
+                    tag['href'] = requests.compat.urljoin(url_or_search, tag['href'])
+                if tag.has_attr('src'):
+                    src_url = requests.compat.urljoin(url_or_search, tag['src'])
+                    futures.append(session.get(src_url))
+                    tag['src'] = src_url
+
+            [future.result() for future in futures]
+
+            return compress_response(str(soup), content_type)
+        else:
+            return Response(content, content_type=content_type)
+    
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -242,12 +283,22 @@ def credits():
         <div class="container">
             <h1>Interscope Credits</h1>
             <p>This project was created by Lucas.</p>
-            <p>Insporation for this project Interstellar</p>
-            <p> If there is any bugs or games u want me to add. add me on discord @nevrloose </p>
+            <p>Inspiration for this project Interstellar</p>
+            <p>If there are any bugs or games you want me to add, add me on Discord @nevrloose</p>
         </div>
     </body>
     </html>
     ''')
+
+def compress_response(content, content_type):
+    if "text" in content_type.lower():
+        compressed_content = gzip.compress(content.encode('utf-8'))
+        response = Response(compressed_content, content_type=content_type)
+        response.headers['Content-Encoding'] = 'gzip'
+        response.headers['Content-Length'] = len(compressed_content)
+    else:
+        response = Response(content, content_type=content_type)
+    return response
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8080)
