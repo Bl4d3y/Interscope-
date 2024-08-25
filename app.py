@@ -176,7 +176,7 @@ def games():
         <div class="container">
             <h1>Interscope Games</h1>
             <ul>
-                <li><a href="/proxy?url=https://1v1.lol" style="color: white; text-decoration: none;">1v1.lol</a></li>
+                <li><a href="/proxy?url=https%3A%2F%2F1v1.lol%2F" style="color: white; text-decoration: none;">1v1.lol</a></li>
                 <li><a href="/proxy?url=https://shellshock.io" style="color: white; text-decoration: none;">Shell Shockers</a></li>
                 <li><a href="/proxy?url=https://krunker.io" style="color: white; text-decoration: none;">Krunker.io</a></li>
             </ul>
